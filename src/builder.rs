@@ -1,22 +1,28 @@
-use crate::{
-    key_part::KeyPart,
-    prefix_tree_map::{Node, PrefixTreeMap},
-    std_lib::{BinaryHeap, Ordering},
+use {
+    crate::{
+        key_part::KeyPart,
+        prefix_tree_map::{Node, PrefixTreeMap},
+        std_lib::{BinaryHeap, Ordering},
+    },
+    core::{cell::RefCell, mem},
+    std::rc::Rc,
 };
 
 /// The prefix tree map builder
 #[derive(Clone)]
 pub struct PrefixTreeMapBuilder<E, W, V> {
-    root: NodeBuilder<E, W, V>,
+    root: Rc<NodeBuilder<E, W, V>>,
     max_wildcard_depth: usize,
 }
 
 #[derive(Clone)]
 struct NodeBuilder<E, W, V> {
     key_part: Option<KeyPart<E, W>>,
-    value: Option<V>,
-    children: Option<BinaryHeap<NodeBuilder<E, W, V>>>,
+    value: RefCell<Option<V>>,
+    children: RefCell<Option<Children<E, W, V>>>,
 }
+
+type Children<E, W, V> = BinaryHeap<Rc<NodeBuilder<E, W, V>>>;
 
 impl<E, W, V> PrefixTreeMapBuilder<E, W, V>
 where
@@ -26,11 +32,11 @@ where
     /// Create a new `PrefixTreeMapBuilder`
     pub fn new() -> Self {
         Self {
-            root: NodeBuilder {
+            root: Rc::new(NodeBuilder {
                 key_part: None,
-                value: None,
-                children: None,
-            },
+                value: RefCell::new(None),
+                children: RefCell::new(None),
+            }),
             max_wildcard_depth: 0,
         }
     }
@@ -41,7 +47,7 @@ where
     ///
     /// Insert into a existed key path could overwrite the value in it
     pub fn insert(&mut self, key: impl IntoIterator<Item = KeyPart<E, W>>, value: V) {
-        let mut node = &mut self.root as *mut NodeBuilder<E, W, V>;
+        let mut node = Rc::clone(&self.root);
         let mut wildcard_depth = 0;
 
         for key_part in key {
@@ -49,45 +55,43 @@ where
                 wildcard_depth += 1;
             }
 
-            if unsafe { (*node).children.is_none() } {
+            if node.children.borrow().is_none() {
                 let mut children = BinaryHeap::new();
-                children.push(NodeBuilder::new(key_part));
+                children.push(Rc::new(NodeBuilder::new(key_part)));
 
-                unsafe {
-                    (*node).children = Some(children);
-                }
+                *node.children.borrow_mut() = Some(children);
 
-                let child = unsafe { (*node).children.as_ref().unwrap().peek().unwrap() };
+                let child = Rc::clone(node.children.borrow().as_ref().unwrap().peek().unwrap());
 
-                let child_const_ptr = child as *const NodeBuilder<E, W, V>;
-                node = child_const_ptr as *mut NodeBuilder<E, W, V>;
+                node = child;
             } else {
-                let children = unsafe { (*node).children.as_mut().unwrap() };
+                let mut children_ref = node.children.borrow_mut();
+                let children = children_ref.as_mut().unwrap();
 
                 if let Some(child) = children
                     .iter()
                     .find(|child| child.key_part.as_ref() == Some(&key_part))
+                    .map(Rc::clone)
                 {
-                    let child_const_ptr = child as *const NodeBuilder<E, W, V>;
-                    node = child_const_ptr as *mut NodeBuilder<E, W, V>;
+                    mem::drop(children_ref);
+                    node = child;
                 } else {
                     let key_part_cloned = key_part.clone();
-                    children.push(NodeBuilder::new(key_part_cloned));
+                    children.push(Rc::new(NodeBuilder::new(key_part_cloned)));
 
                     let child = children
                         .iter()
                         .find(|child| child.key_part.as_ref() == Some(&key_part))
+                        .map(Rc::clone)
                         .unwrap();
 
-                    let child_const_ptr = child as *const NodeBuilder<E, W, V>;
-                    node = child_const_ptr as *mut NodeBuilder<E, W, V>;
+                    mem::drop(children_ref);
+                    node = child;
                 }
             }
         }
 
-        unsafe {
-            (*node).value = Some(value);
-        }
+        *node.value.borrow_mut() = Some(value);
 
         self.max_wildcard_depth = self.max_wildcard_depth.max(wildcard_depth);
     }
@@ -105,11 +109,12 @@ where
         }
     }
 
-    fn node_builder_to_node(node_builder: NodeBuilder<E, W, V>) -> Node<E, W, V> {
+    fn node_builder_to_node(node_builder: Rc<NodeBuilder<E, W, V>>) -> Node<E, W, V> {
+        let node_builder = Rc::try_unwrap(node_builder).map_err(|_| ()).unwrap();
         let key_part = node_builder.key_part;
-        let value = node_builder.value;
+        let value = node_builder.value.into_inner();
 
-        let children = node_builder.children.map(|children| {
+        let children = node_builder.children.into_inner().map(|children| {
             children
                 .into_sorted_vec()
                 .into_iter()
@@ -143,8 +148,8 @@ where
     fn new(key_part: KeyPart<E, W>) -> Self {
         Self {
             key_part: Some(key_part),
-            value: None,
-            children: None,
+            value: RefCell::new(None),
+            children: RefCell::new(None),
         }
     }
 }
