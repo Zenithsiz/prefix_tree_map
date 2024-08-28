@@ -57,19 +57,12 @@ where
                     (*node).children = Some(children);
                 }
 
-                let child = unsafe {
-                    (*node)
-                        .children
-                        .as_ref()
-                        .unwrap_unchecked()
-                        .peek()
-                        .unwrap_unchecked()
-                };
+                let child = unsafe { (*node).children.as_ref().unwrap().peek().unwrap() };
 
                 let child_const_ptr = child as *const NodeBuilder<E, W, V>;
                 node = child_const_ptr as *mut NodeBuilder<E, W, V>;
             } else {
-                let children = unsafe { (*node).children.as_mut().unwrap_unchecked() };
+                let children = unsafe { (*node).children.as_mut().unwrap() };
 
                 if let Some(child) = children
                     .iter()
@@ -81,12 +74,10 @@ where
                     let key_part_cloned = key_part.clone();
                     children.push(NodeBuilder::new(key_part_cloned));
 
-                    let child = unsafe {
-                        children
-                            .iter()
-                            .find(|child| child.key_part.as_ref() == Some(&key_part))
-                            .unwrap_unchecked()
-                    };
+                    let child = children
+                        .iter()
+                        .find(|child| child.key_part.as_ref() == Some(&key_part))
+                        .unwrap();
 
                     let child_const_ptr = child as *const NodeBuilder<E, W, V>;
                     node = child_const_ptr as *mut NodeBuilder<E, W, V>;

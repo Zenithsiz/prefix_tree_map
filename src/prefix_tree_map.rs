@@ -40,19 +40,17 @@ where
             let mut try_backtrack = node.children.is_none();
 
             if !try_backtrack {
-                let children = unsafe { node.children.as_ref().unwrap_unchecked() };
+                let children = node.children.as_ref().unwrap();
 
                 children
                     .iter()
-                    .take_while(|child| unsafe {
-                        child.key_part.as_ref().unwrap_unchecked().is_wildcard()
-                    })
+                    .take_while(|child| child.key_part.as_ref().unwrap().is_wildcard())
                     .for_each(|child| {
                         wildcards.push((key_part_idx, child));
                     });
 
                 if let Ok(child_idx) = children.binary_search_by(|child| {
-                    let child_key_part = unsafe { child.key_part.as_ref().unwrap_unchecked() };
+                    let child_key_part = child.key_part.as_ref().unwrap();
                     child_key_part.as_ref().cmp(&KeyPart::Exact(key_part))
                 }) {
                     node = &children[child_idx];
@@ -97,19 +95,17 @@ where
             let mut try_backtrack = node.children.is_none();
 
             if !try_backtrack {
-                let children = unsafe { node.children.as_ref().unwrap_unchecked() };
+                let children = node.children.as_ref().unwrap();
 
                 children
                     .iter()
-                    .take_while(|child| unsafe {
-                        child.key_part.as_ref().unwrap_unchecked().is_wildcard()
-                    })
+                    .take_while(|child| child.key_part.as_ref().unwrap().is_wildcard())
                     .for_each(|child| {
                         wildcards.push((key_part_idx, child));
                     });
 
                 if let Ok(child_idx) = children.binary_search_by(|child| {
-                    let child_key_part = unsafe { child.key_part.as_ref().unwrap_unchecked() };
+                    let child_key_part = child.key_part.as_ref().unwrap();
                     child_key_part.as_ref().cmp(&KeyPart::Exact(key_part))
                 }) {
                     node = &children[child_idx];
@@ -149,13 +145,7 @@ where
         }
 
         for (_, node, matched_key_part) in captured.into_iter() {
-            let wildcard_key_part = unsafe {
-                node.key_part
-                    .as_ref()
-                    .unwrap_unchecked()
-                    .as_ref()
-                    .unwrap_wildcard()
-            };
+            let wildcard_key_part = node.key_part.as_ref().unwrap().as_ref().unwrap_wildcard();
             captures.insert(wildcard_key_part.clone(), matched_key_part.clone());
         }
 
@@ -169,10 +159,10 @@ where
         for key_part in key {
             node.children.as_ref()?;
 
-            let children = unsafe { node.children.as_ref().unwrap_unchecked() };
+            let children = node.children.as_ref().unwrap();
 
             if let Ok(child_idx) = children.binary_search_by(|child| {
-                let child_key_part = unsafe { child.key_part.as_ref().unwrap_unchecked() };
+                let child_key_part = child.key_part.as_ref().unwrap();
                 child_key_part.as_ref().cmp(&KeyPart::Exact(key_part))
             }) {
                 node = &children[child_idx];
